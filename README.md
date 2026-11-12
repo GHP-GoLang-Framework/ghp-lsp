@@ -80,32 +80,87 @@ printf 'Content-Length: 58\r\n\r\n{"jsonrpc":"2.0","id":1,"method":"initialize",
 or drive it from a script (see `tests/common/mod.rs` for a small Rust client, `tests/fake_gopls.rs` for a scripted gopls
 stand-in that misbehaves on cue).
 
+## Install
+
+Download the archive for your platform from the [Releases](https://github.com/GHP-GoLang-Framework/ghp-lsp/releases) page
+(`ghp-lsp-<tag>-<target>.tar.gz`, `.zip` on Windows). Targets: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`,
+`aarch64-apple-darwin`, `x86_64-apple-darwin`, `x86_64-pc-windows-msvc`.
+
+```sh
+# example: Linux x86_64 (replace the tag and target)
+tag=v0.1.0; target=x86_64-unknown-linux-gnu
+curl -LO https://github.com/GHP-GoLang-Framework/ghp-lsp/releases/download/$tag/ghp-lsp-$tag-$target.tar.gz
+curl -LO https://github.com/GHP-GoLang-Framework/ghp-lsp/releases/download/$tag/SHA256SUMS
+sha256sum --ignore-missing -c SHA256SUMS      # macOS: shasum -a 256 -c SHA256SUMS --ignore-missing (or compare by hand)
+tar -xzf ghp-lsp-$tag-$target.tar.gz
+install -m755 ghp-lsp-$tag-$target/ghp-lsp ~/.local/bin/   # any directory on your PATH
+ghp-lsp --version
+```
+
+On Windows, unzip the archive and put the folder with `ghp-lsp.exe` on your `PATH`; the binary needs no Visual C++
+Redistributable. Or build from source: `cargo install --locked --git https://github.com/GHP-GoLang-Framework/ghp-lsp`.
+
+**gopls** must be on `PATH` (or set `GHP_GOPLS`) for Go completion, hover, definition and diagnostics inside tags
+(`go install golang.org/x/tools/gopls@latest`). It is optional: without it the server falls back to its built-in scope
+analysis of the page's local names.
+
 ## Editors
 
-Any client that can launch a stdio server for `*.ghp`:
+Any client that can launch a stdio server for `*.ghp` works. [Lumen](https://github.com/castrogusttavo/lumen-text)
+ships `ghp-lsp` and starts it for `.ghp` files with no setup. Elsewhere, install the binary first (above).
 
-* **Lumen**: built in.
-
-Install the binary first: `cargo install --locked --git https://github.com/GHP-GoLang-Framework/ghp-lsp`, or build it as shown below and put it on your `PATH`.
-
-* **Neovim** (`vim.lsp`):
+* **Neovim** 0.11+ (`vim.lsp.config`):
   ```lua
   vim.filetype.add({ extension = { ghp = "ghp" } })
-  vim.lsp.config("ghp", { cmd = { "ghp-lsp" }, filetypes = { "ghp" }, root_markers = { "go.mod" } })
-  vim.lsp.enable("ghp")
+  vim.lsp.config("ghp_lsp", { cmd = { "ghp-lsp" }, filetypes = { "ghp" }, root_markers = { "go.mod", ".git" } })
+  vim.lsp.enable("ghp_lsp")
   ```
-* **Helix** (`languages.toml`):
+  With `nvim-lspconfig` on older Neovim:
+  ```lua
+  local configs = require("lspconfig.configs")
+  if not configs.ghp_lsp then
+    configs.ghp_lsp = {
+      default_config = {
+        cmd = { "ghp-lsp" },
+        filetypes = { "ghp" },
+        root_dir = require("lspconfig.util").root_pattern("go.mod", ".git"),
+      },
+    }
+  end
+  require("lspconfig").ghp_lsp.setup({})
+  ```
+* **Helix** (`~/.config/helix/languages.toml`):
   ```toml
   [language-server.ghp-lsp]
   command = "ghp-lsp"
+
   [[language]]
   name = "ghp"
   scope = "text.html.ghp"
   file-types = ["ghp"]
+  roots = ["go.mod"]
   language-servers = ["ghp-lsp"]
   ```
-* **Emacs** (eglot): `(add-to-list 'eglot-server-programs '(ghp-mode "ghp-lsp"))`.
-* **VS Code**: use a generic LSP-client extension configured with `ghp-lsp` over stdio for the `ghp` language id.
+* **Zed** (`settings.json`): the [ghp-zed](https://github.com/GHP-GoLang-Framework/ghp-zed) extension currently only
+  provides syntax highlighting, so register the server through settings. Install the extension, then:
+  ```json
+  {
+    "lsp": { "ghp-lsp": { "binary": { "path": "ghp-lsp" } } },
+    "languages": { "GHP": { "language_servers": ["ghp-lsp"] } }
+  }
+  ```
+  Zed only starts servers that an extension declares, so until ghp-zed declares `ghp-lsp` this snippet may have no
+  effect; track the extension for built-in support.
+* **VS Code**: [ghp-vscode](https://github.com/GHP-GoLang-Framework/ghp-vscode) provides syntax highlighting, snippets
+  and the `ghp` language id only; it does not start a language server. Add a generic LSP-client extension that can run
+  a stdio command for a language id (for example "Generic LSP Client") and point it at `ghp-lsp` for the `ghp` language.
+* **Emacs** (eglot, Emacs 29+; define a `ghp-mode` first, for example `(define-derived-mode ghp-mode html-mode "GHP")`):
+  ```elisp
+  (add-to-list 'auto-mode-alist '("\\.ghp\\'" . ghp-mode))
+  (with-eval-after-load 'eglot
+    (add-to-list 'eglot-server-programs '(ghp-mode "ghp-lsp")))
+  (add-hook 'ghp-mode-hook #'eglot-ensure)
+  ```
 
 ## Go inside attributes
 
@@ -157,8 +212,9 @@ cargo test --locked                      # unit, parser fuzz, stdio robustness/f
 cargo test --locked -- --ignored         # with gopls on PATH: real-gopls bridge, router and server tests
 ```
 
-CI (`.github/workflows/ghp-lsp.yml`): fmt, clippy `-D warnings`, tests on Linux and Windows, and the real-gopls job
-(gopls pinned). The Lumen side is covered by `lsp_ghp` in the editor.
+CI (`.github/workflows/ci.yml`): fmt, clippy `-D warnings`, tests on Linux and Windows (plus a check that the Windows
+binary does not import `VCRUNTIME140`), and the real-gopls job (gopls pinned). Pushing a `v*` tag runs
+`.github/workflows/release.yml`, which builds the five targets and publishes the Release.
 `Cargo.lock` is committed; all builds use `--locked`.
 
 ## License
