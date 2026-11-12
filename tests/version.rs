@@ -3,11 +3,8 @@
 use std::process::{Command, Stdio};
 
 fn run(flag: &str) -> String {
-    let out = Command::new(env!("CARGO_BIN_EXE_ghp-lsp"))
-        .arg(flag)
-        .stdin(Stdio::null())
-        .output()
-        .expect("spawn ghp-lsp");
+    let out =
+        Command::new(env!("CARGO_BIN_EXE_ghp-lsp")).arg(flag).stdin(Stdio::null()).output().expect("spawn ghp-lsp");
     assert!(out.status.success(), "{flag} must exit 0");
     String::from_utf8(out.stdout).unwrap()
 }
