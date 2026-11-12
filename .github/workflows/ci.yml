@@ -21,3 +21,35 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo test --locked
+      - name: Windows release binary does not need the VC++ Redistributable
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          cargo build --release --locked
+          bin=target/release/ghp-lsp.exe
+          test -f "$bin"
+          if grep -qa 'VCRUNTIME140' "$bin"; then
+            echo "$bin imports VCRUNTIME140.dll: crt-static is not in effect" >&2; exit 1
+          fi
+
+  gopls:
+    name: gopls bridge (real gopls)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Pinned so an upstream gopls release cannot turn this job red on its own.
+      GOPLS_VERSION: v0.24.0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+      - run: go install golang.org/x/tools/gopls@${GOPLS_VERSION}
+      - run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - run: gopls version
+      # The demo module must itself be valid Go, otherwise the tests prove nothing.
+      - run: go vet ./...
+        working-directory: tests/demo
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --locked --test gopls_integration --test router_integration --test gopls_server -- --ignored --nocapture
