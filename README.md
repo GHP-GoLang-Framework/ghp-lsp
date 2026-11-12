@@ -4,8 +4,8 @@ Language server for [GHP](https://github.com/GHP-GoLang-Framework/ghp) templates
 Go islands (`<go= expr />`, `<go:if cond/>`, `<go:for .../>`, `<go ... />`, `<go:import .../>`).
 
 It speaks LSP over stdio, so any editor with a generic LSP client can use it (Neovim, Helix, Emacs, Zed, ...).
-[Lumen](https://github.com/castrogusttavo/lumen-text) ships the binary next to the editor and starts it for `.ghp` files.
-This repository is the standalone home of the server, extracted from Lumen's `tools/ghp-lsp`.
+[Lumen](https://github.com/castrogusttavo/lumen-text) starts it for `.ghp` files once `ghp-lsp` is on your `PATH` (see below), like any other language server.
+This repository is the home of the server.
 
 * The **GHP side** (tags, blocks, structure) is answered by the server itself, from an error-tolerant parser:
   it always produces a tree, whatever the input, and every problem becomes a diagnostic.
@@ -107,7 +107,8 @@ analysis of the page's local names.
 ## Editors
 
 Any client that can launch a stdio server for `*.ghp` works. [Lumen](https://github.com/castrogusttavo/lumen-text)
-ships `ghp-lsp` and starts it for `.ghp` files with no setup. Elsewhere, install the binary first (above).
+finds `ghp-lsp` on your `PATH` (or in `~/.local/share/lumen-text/lsp/bin`) and starts it for `.ghp` files with no other setup.
+Install the binary first (above), whatever the editor.
 
 * **Neovim** 0.11+ (`vim.lsp.config`):
   ```lua
